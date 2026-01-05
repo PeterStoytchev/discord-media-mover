@@ -1,10 +1,14 @@
 use std::env;
 
+use dotenvy::dotenv;
+use futures::stream::{self, StreamExt};
 use serenity::{
     Client,
-    all::{ChannelId, CreateAttachment, CreateMessage, EventHandler, GatewayIntents, Message},
+    all::{
+        ChannelId, CreateAttachment, CreateMessage, EditMessage, EventHandler, GatewayIntents,
+        Message,
+    },
     async_trait,
-    futures::future::join_all,
     prelude::Context,
 };
 
@@ -15,14 +19,17 @@ const DEST_CHANNEL_ID: ChannelId = ChannelId::new(829861206777004042);
 #[async_trait]
 impl EventHandler for Handler {
     async fn message(&self, ctx: Context, msg: Message) {
-        if msg.attachments.len() == 0 || msg.channel_id == DEST_CHANNEL_ID {
+        if msg.attachments.len() == 0 || msg.channel_id == DEST_CHANNEL_ID || msg.author.bot {
             return;
         }
 
-        let gifs_promises = msg
+        let filtered_attachements = msg
+            .clone()
             .attachments
-            .iter()
-            .filter(|attachment| attachment.content_type.as_ref().unwrap() == "image/gif")
+            .into_iter()
+            .filter(|attachment| attachment.content_type.as_ref().unwrap() == "image/gif");
+
+        let gifs: Vec<CreateAttachment> = stream::iter(filtered_attachements)
             .map(async |attachment| {
                 println!(
                     "Message: {}, Channel: {}, Attachement ID: {}",
@@ -31,11 +38,15 @@ impl EventHandler for Handler {
 
                 let data = attachment.download().await.unwrap();
                 CreateAttachment::bytes(data, attachment.filename.clone())
-            });
+            })
+            .buffer_unordered(5)
+            .collect()
+            .await;
 
-        let gifs = join_all(gifs_promises).await;
+        let new_message = CreateMessage::new().content(format!("Gif from: {}", msg.clone().link()));
+
         DEST_CHANNEL_ID
-            .send_files(ctx.http.clone(), gifs, CreateMessage::new())
+            .send_files(ctx.http.clone(), gifs, new_message)
             .await
             .unwrap();
     }
@@ -43,6 +54,8 @@ impl EventHandler for Handler {
 
 #[tokio::main]
 async fn main() {
+    dotenv().ok();
+
     let token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
 
     let intents = GatewayIntents::all();
