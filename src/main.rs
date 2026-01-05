@@ -5,8 +5,8 @@ use futures::stream::{self, StreamExt};
 use serenity::{
     Client,
     all::{
-        Attachment, ChannelId, CreateAttachment, CreateEmbed, CreateMessage, EditMessage, Embed,
-        EventHandler, GatewayIntents, Mentionable, Message, MessageId,
+        Attachment, ChannelId, CreateAttachment, CreateMessage, EditMessage, Embed, EventHandler,
+        GatewayIntents, Mentionable, Message, MessageId,
     },
     async_trait,
     prelude::Context,
@@ -42,6 +42,23 @@ async fn generate_attachements(
     return gifs;
 }
 
+fn generate_embeds(embeds: Vec<Embed>) -> Option<Vec<String>> {
+    let mut gif_embeds = embeds
+        .into_iter()
+        .filter(|embed| {
+            embed.kind.as_ref().unwrap() == "gifv" || embed.kind.as_ref().unwrap() == "image" //the right side of the || is a placeholder, to be augmented by introspection logic (check if the image is really a gif)
+        })
+        .peekable();
+
+    if gif_embeds.peek().is_none() {
+        return None;
+    }
+
+    let gif_embeds: Vec<String> = gif_embeds.map(|embed| embed.url.unwrap()).collect();
+
+    Some(gif_embeds)
+}
+
 #[async_trait]
 impl EventHandler for Handler {
     async fn message(&self, ctx: Context, msg: Message) {
@@ -52,23 +69,19 @@ impl EventHandler for Handler {
             return;
         }
 
-        let is_gif_embed = msg
-            .embeds
-            .clone()
-            .into_iter()
-            .filter(|embed| embed.kind.clone().unwrap() == "gifv")
-            .count()
-            > 0;
+        println!("{:?}", msg.embeds);
 
-        if !is_gif_embed && msg.attachments.len() == 0 {
+        let embeds = generate_embeds(msg.embeds.clone());
+
+        if embeds.is_none() && msg.attachments.len() == 0 {
             return;
         }
 
         let gifs = generate_attachements(msg.attachments.clone(), msg.id, msg.channel_id).await;
 
-        let gif_message = match is_gif_embed {
-            true => CreateMessage::new().content(msg.clone().content),
-            false => CreateMessage::new(),
+        let gif_message = match embeds.clone() {
+            Some(_) => CreateMessage::new().content("New gif!"),
+            None => CreateMessage::new(),
         };
 
         let mut gif_message = DEST_CHANNEL_ID
@@ -76,19 +89,20 @@ impl EventHandler for Handler {
             .await
             .unwrap();
 
-        let new_message = match is_gif_embed {
-            true => CreateMessage::new().content(format!(
-                "Gif(s) rerouted to {}. Original message sent by {}",
-                gif_message.link(),
-                msg.clone().author.mention(),
-            )),
-            false => CreateMessage::new().content(format!(
-                "{}\nGif(s) rerouted to {}. Original message sent by {}",
-                msg.clone().content,
-                gif_message.link(),
-                msg.clone().author.mention(),
-            )),
-        };
+        let new_message = CreateMessage::new().content(format!(
+            "{}\nGif(s) rerouted to {}. Original message sent by {}",
+            match embeds.clone() {
+                None => msg.content.clone(),
+                Some(vals) => vals
+                    .iter()
+                    .fold(msg.content.clone(), |acc, word| acc.replace(word, ""))
+                    .split_whitespace()
+                    .collect::<Vec<&str>>()
+                    .join(" "),
+            },
+            gif_message.link(),
+            msg.clone().author.mention()
+        ));
 
         let new_message = msg
             .clone()
@@ -100,13 +114,13 @@ impl EventHandler for Handler {
         gif_message
             .edit(
                 &ctx,
-                match is_gif_embed {
-                    true => EditMessage::new().content(format!(
+                match embeds {
+                    Some(val) => EditMessage::new().content(format!(
                         "Gif from: {}\n{}",
                         new_message.clone().link(),
-                        msg.clone().content
+                        val.join("\n")
                     )),
-                    false => EditMessage::new()
+                    None => EditMessage::new()
                         .content(format!("Gif from: {}", new_message.clone().link())),
                 },
             )
