@@ -42,19 +42,38 @@ async fn generate_attachements(
     return gifs;
 }
 
-fn generate_embeds(embeds: Vec<Embed>) -> Option<Vec<String>> {
-    let mut gif_embeds = embeds
-        .into_iter()
-        .filter(|embed| {
-            embed.kind.as_ref().unwrap() == "gifv" || embed.kind.as_ref().unwrap() == "image" //the right side of the || is a placeholder, to be augmented by introspection logic (check if the image is really a gif)
-        })
-        .peekable();
+async fn generate_embeds(embeds: Vec<Embed>) -> Option<Vec<String>> {
+    let client = reqwest::Client::new();
 
-    if gif_embeds.peek().is_none() {
+    let gif_embeds: Vec<String> = stream::iter(embeds.into_iter().filter(|embed| {
+        embed.kind.as_ref().unwrap() == "gifv" || embed.kind.as_ref().unwrap() == "image" //the right side of the || is a placeholder, to be augmented by introspection logic (check if the image is really a gif)
+    }))
+    .filter(|embed| {
+        let client = client.clone();
+        let url = embed.url.clone();
+        let kind = embed.kind.clone();
+
+        async move {
+            if kind.as_ref().unwrap() == "image" {
+                let response = client.get(url.clone().unwrap()).send().await.unwrap();
+
+                if let Some(ct) = response.headers().get("content-type") {
+                    ct.to_str().unwrap().contains("image/gif")
+                } else {
+                    false
+                }
+            } else {
+                true
+            }
+        }
+    })
+    .map(|embed| embed.url.unwrap())
+    .collect()
+    .await;
+
+    if gif_embeds.len() == 0 {
         return None;
     }
-
-    let gif_embeds: Vec<String> = gif_embeds.map(|embed| embed.url.unwrap()).collect();
 
     Some(gif_embeds)
 }
@@ -69,9 +88,7 @@ impl EventHandler for Handler {
             return;
         }
 
-        println!("{:?}", msg.embeds);
-
-        let embeds = generate_embeds(msg.embeds.clone());
+        let embeds = generate_embeds(msg.embeds.clone()).await;
 
         if embeds.is_none() && msg.attachments.len() == 0 {
             return;
