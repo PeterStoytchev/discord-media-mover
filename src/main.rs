@@ -45,9 +45,11 @@ async fn generate_attachements(
 async fn generate_embeds(embeds: Vec<Embed>) -> Option<Vec<String>> {
     let client = reqwest::Client::new();
 
-    let gif_embeds: Vec<String> = stream::iter(embeds.into_iter().filter(|embed| {
-        embed.kind.as_ref().unwrap() == "gifv" || embed.kind.as_ref().unwrap() == "image" //the right side of the || is a placeholder, to be augmented by introspection logic (check if the image is really a gif)
-    }))
+    let gif_embeds: Vec<String> = stream::iter(
+        embeds
+            .into_iter()
+            .filter(|embed| ["gifv", "image"].contains(&embed.kind.as_deref().unwrap_or(""))),
+    )
     .filter(|embed| {
         let client = client.clone();
         let url = embed.url.clone();
