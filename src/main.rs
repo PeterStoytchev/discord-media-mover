@@ -6,7 +6,7 @@ use serenity::{
     Client,
     all::{
         ChannelId, CreateAttachment, CreateMessage, EditMessage, EventHandler, GatewayIntents,
-        Message,
+        Mentionable, Message,
     },
     async_trait,
     prelude::Context,
@@ -43,12 +43,35 @@ impl EventHandler for Handler {
             .collect()
             .await;
 
-        let new_message = CreateMessage::new().content(format!("Gif from: {}", msg.clone().link()));
-
-        DEST_CHANNEL_ID
-            .send_files(ctx.http.clone(), gifs, new_message)
+        let gif_message = CreateMessage::new();
+        let mut gif_message = DEST_CHANNEL_ID
+            .send_files(ctx.http.clone(), gifs, gif_message)
             .await
             .unwrap();
+
+        let new_message = CreateMessage::new().content(format!(
+            "{}\nGif(s) rerouted to {}. Original message sent by {}",
+            msg.clone().content,
+            gif_message.link(),
+            msg.clone().author.mention(),
+        ));
+
+        let new_message = msg
+            .clone()
+            .channel_id
+            .send_message(&ctx, new_message)
+            .await
+            .unwrap();
+
+        gif_message
+            .edit(
+                &ctx,
+                EditMessage::new().content(format!("Gif from: {}", new_message.clone().link())),
+            )
+            .await
+            .unwrap();
+
+        msg.clone().delete(&ctx).await.unwrap();
     }
 }
 
