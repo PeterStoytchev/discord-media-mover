@@ -18,6 +18,8 @@ struct Handler;
 //const DEST_CHANNEL_ID: ChannelId = ChannelId::new(829861206777004042);
 const DEST_CHANNEL_ID: ChannelId = ChannelId::new(1459932398346047781);
 
+const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
 async fn generate_attachements(
     attachments: Vec<Attachment>,
     msg_id: MessageId,
@@ -45,7 +47,10 @@ async fn generate_attachements(
 }
 
 async fn detect_link_embeds(content: String) -> Option<Vec<String>> {
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .user_agent(USER_AGENT)
+        .build()
+        .unwrap();
 
     let mut finder = LinkFinder::new();
     finder.kinds(&[LinkKind::Url]);
