@@ -1,5 +1,5 @@
-use std::env;
-use tokio::process::Command;
+use std::{env, time::Duration};
+use tokio::{process::Command, time::sleep};
 
 use dotenvy::dotenv;
 use futures::stream::{self, StreamExt};
@@ -131,50 +131,54 @@ impl EventHandler for Handler {
             None => CreateMessage::new(),
         };
 
-        let mut gif_message = DEST_CHANNEL_ID
-            .send_files(ctx.http.clone(), gifs, gif_message)
-            .await
-            .unwrap();
+        tokio::spawn(async move {
+            sleep(Duration::from_secs(10)).await;
 
-        let new_message = CreateMessage::new().content(format!(
-            "{}\nGif(s) rerouted to {}. Original message sent by {}",
-            match embeds.clone() {
-                None => msg.content.clone(),
-                Some(vals) => vals
-                    .iter()
-                    .fold(msg.content.clone(), |acc, word| acc.replace(word, ""))
-                    .split_whitespace()
-                    .collect::<Vec<&str>>()
-                    .join(" "),
-            },
-            gif_message.link(),
-            msg.clone().author.mention()
-        ));
+            let mut gif_message = DEST_CHANNEL_ID
+                .send_files(ctx.http.clone(), gifs, gif_message)
+                .await
+                .unwrap();
 
-        let new_message = msg
-            .clone()
-            .channel_id
-            .send_message(&ctx, new_message)
-            .await
-            .unwrap();
-
-        gif_message
-            .edit(
-                &ctx,
-                match embeds {
-                    Some(val) => EditMessage::new().content(format!(
-                        "Gif from: {}\n{}",
-                        new_message.clone().link(),
-                        val.join("\n")
-                    )),
-                    None => EditMessage::new()
-                        .content(format!("Gif from: {}", new_message.clone().link())),
+            let new_message = CreateMessage::new().content(format!(
+                "{}\nGif(s) rerouted to {}. Original message sent by {}",
+                match embeds.clone() {
+                    None => msg.content.clone(),
+                    Some(vals) => vals
+                        .iter()
+                        .fold(msg.content.clone(), |acc, word| acc.replace(word, ""))
+                        .split_whitespace()
+                        .collect::<Vec<&str>>()
+                        .join(" "),
                 },
-            )
-            .await
-            .unwrap();
+                gif_message.link(),
+                msg.clone().author.mention()
+            ));
 
-        msg.clone().delete(&ctx).await.unwrap();
+            let new_message = msg
+                .clone()
+                .channel_id
+                .send_message(&ctx, new_message)
+                .await
+                .unwrap();
+
+            gif_message
+                .edit(
+                    &ctx,
+                    match embeds {
+                        Some(val) => EditMessage::new().content(format!(
+                            "Gif from: {}\n{}",
+                            new_message.clone().link(),
+                            val.join("\n")
+                        )),
+                        None => EditMessage::new()
+                            .content(format!("Gif from: {}", new_message.clone().link())),
+                    },
+                )
+                .await
+                .unwrap();
+
+            msg.clone().delete(&ctx).await.unwrap();
+        });
     }
 }
 
