@@ -1,4 +1,5 @@
 use std::env;
+use tokio::process::Command;
 
 use dotenvy::dotenv;
 use futures::stream::{self, StreamExt};
@@ -18,7 +19,32 @@ struct Handler;
 //const DEST_CHANNEL_ID: ChannelId = ChannelId::new(829861206777004042);
 const DEST_CHANNEL_ID: ChannelId = ChannelId::new(1459932398346047781);
 
-const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+async fn is_gif_via_curl(url: &str) -> bool {
+    let output = Command::new("curl")
+        .arg("-I")
+        .arg("-L")
+        .arg("-A")
+        .arg("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        .arg(url)
+        .output().await;
+
+    match output {
+        Ok(out) => {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+
+            let lower_out = stdout.to_lowercase();
+            let ct = lower_out
+                .lines()
+                .filter(|line| line.starts_with("content-type"))
+                .next()
+                .unwrap();
+
+            println!("{}", ct);
+            ct.contains("image/gif")
+        }
+        Err(_) => false,
+    }
+}
 
 async fn generate_attachements(
     attachments: Vec<Attachment>,
@@ -47,11 +73,6 @@ async fn generate_attachements(
 }
 
 async fn detect_link_embeds(content: String) -> Option<Vec<String>> {
-    let client = reqwest::Client::builder()
-        .user_agent(USER_AGENT)
-        .build()
-        .unwrap();
-
     let mut finder = LinkFinder::new();
     finder.kinds(&[LinkKind::Url]);
 
@@ -63,7 +84,6 @@ async fn detect_link_embeds(content: String) -> Option<Vec<String>> {
     let gif_embeds: Vec<String> = stream::iter(found_urls.into_iter())
         .filter(|link| {
             let url = link.clone();
-            let client = client.clone();
 
             async move {
                 if url.clone().to_lowercase().contains("tenor.com") {
@@ -71,15 +91,9 @@ async fn detect_link_embeds(content: String) -> Option<Vec<String>> {
                     return true;
                 }
 
-                let response = client.get(url.clone()).send().await.unwrap();
+                let is_gif = is_gif_via_curl(&url).await;
 
-                let content_t = response.headers().get("content-type");
-                if let Some(ct) = content_t {
-                    println!("Embed type: {:?}", content_t);
-                    ct.to_str().unwrap().contains("image/gif")
-                } else {
-                    false
-                }
+                is_gif
             }
         })
         .collect()
