@@ -2,10 +2,11 @@ use std::env;
 
 use dotenvy::dotenv;
 use futures::stream::{self, StreamExt};
+use linkify::{LinkFinder, LinkKind};
 use serenity::{
     Client,
     all::{
-        Attachment, ChannelId, CreateAttachment, CreateMessage, EditMessage, Embed, EventHandler,
+        Attachment, ChannelId, CreateAttachment, CreateMessage, EditMessage, EventHandler,
         GatewayIntents, Mentionable, Message, MessageId,
     },
     async_trait,
@@ -14,7 +15,8 @@ use serenity::{
 
 struct Handler;
 
-const DEST_CHANNEL_ID: ChannelId = ChannelId::new(829861206777004042);
+//const DEST_CHANNEL_ID: ChannelId = ChannelId::new(829861206777004042);
+const DEST_CHANNEL_ID: ChannelId = ChannelId::new(1459932398346047781);
 
 async fn generate_attachements(
     attachments: Vec<Attachment>,
@@ -42,36 +44,41 @@ async fn generate_attachements(
     return gifs;
 }
 
-async fn generate_embeds(embeds: Vec<Embed>) -> Option<Vec<String>> {
+async fn detect_link_embeds(content: String) -> Option<Vec<String>> {
     let client = reqwest::Client::new();
 
-    let gif_embeds: Vec<String> = stream::iter(
-        embeds
-            .into_iter()
-            .filter(|embed| ["gifv", "image"].contains(&embed.kind.as_deref().unwrap_or(""))),
-    )
-    .filter(|embed| {
-        let client = client.clone();
-        let url = embed.url.clone();
-        let kind = embed.kind.clone();
+    let mut finder = LinkFinder::new();
+    finder.kinds(&[LinkKind::Url]);
 
-        async move {
-            if kind.as_ref().unwrap() == "image" {
-                let response = client.get(url.clone().unwrap()).send().await.unwrap();
+    let found_urls: Vec<String> = finder
+        .links(&content)
+        .map(|l| l.as_str().to_string())
+        .collect();
 
-                if let Some(ct) = response.headers().get("content-type") {
+    let gif_embeds: Vec<String> = stream::iter(found_urls.into_iter())
+        .filter(|link| {
+            let url = link.clone();
+            let client = client.clone();
+
+            async move {
+                if url.clone().to_lowercase().contains("tenor.com") {
+                    println!("Added! Tenor link detected.");
+                    return true;
+                }
+
+                let response = client.get(url.clone()).send().await.unwrap();
+
+                let content_t = response.headers().get("content-type");
+                if let Some(ct) = content_t {
+                    println!("Embed type: {:?}", content_t);
                     ct.to_str().unwrap().contains("image/gif")
                 } else {
                     false
                 }
-            } else {
-                true
             }
-        }
-    })
-    .map(|embed| embed.url.unwrap())
-    .collect()
-    .await;
+        })
+        .collect()
+        .await;
 
     if gif_embeds.len() == 0 {
         return None;
@@ -83,14 +90,11 @@ async fn generate_embeds(embeds: Vec<Embed>) -> Option<Vec<String>> {
 #[async_trait]
 impl EventHandler for Handler {
     async fn message(&self, ctx: Context, msg: Message) {
-        if (msg.attachments.len() == 0 && msg.embeds.len() == 0)
-            || msg.channel_id == DEST_CHANNEL_ID
-            || msg.author.bot
-        {
+        if msg.channel_id == DEST_CHANNEL_ID || msg.author.bot {
             return;
         }
 
-        let embeds = generate_embeds(msg.embeds.clone()).await;
+        let embeds = detect_link_embeds(msg.content.clone()).await;
 
         if embeds.is_none() && msg.attachments.len() == 0 {
             return;
