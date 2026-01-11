@@ -91,6 +91,11 @@ async fn detect_link_embeds(content: String) -> Option<Vec<String>> {
                     return true;
                 }
 
+                if url.clone().split(".").last().unwrap() == "gif" {
+                    println!(".gif detected");
+                    return true;
+                }
+
                 let is_gif = is_gif_via_curl(&url).await;
 
                 is_gif
