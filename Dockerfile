@@ -1,18 +1,17 @@
-FROM rust:latest as builder
+FROM rust:alpine AS builder
 
-WORKDIR /usr/src/app
+RUN apk add --no-cache musl-dev pkgconfig
+
+WORKDIR /app
 COPY . .
 
-# Standard build (Release mode)
-RUN cargo install --path .
+RUN cargo build --release
 
-FROM debian:bookworm-slim
+FROM alpine:latest
 
-# Install curl
-RUN apt-get update && \
-    apt-get install -y curl ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache ca-certificates curl
 
-COPY --from=builder /usr/local/cargo/bin/discord-media-mover /usr/local/bin/discord-media-mover
+COPY --from=builder /app/target/release/discord-media-mover /usr/local/bin/discord-media-mover
 
+# Set the binary as the entrypoint
 CMD ["discord-media-mover"]
