@@ -1,0 +1,52 @@
+name: Release build
+
+on:
+  workflow_dispatch:
+
+env:
+  BINARY_NAME: discord-media-mover
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build - ${{ matrix.platform }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux Job Configuration
+          - platform: linux
+            target: x86_64-unknown-linux-gnu
+            bin_suffix: ""
+
+          # Windows Job Configuration (Cross-compiled)
+          - platform: windows
+            target: x86_64-pc-windows-gnu
+            bin_suffix: ".exe"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      # Only install the Windows linker if we are currently inside the Windows matrix job
+      - name: Install MinGW (Windows Linker)
+        if: matrix.platform == 'windows'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mingw-w64
+
+      - name: Build Release
+        run: cargo build --release --target ${{ matrix.target }}
+
+      # Uploads the specific file to GitHub Artifacts
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BINARY_NAME }}-${{ matrix.platform }}
+          path: target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}${{ matrix.bin_suffix }}
