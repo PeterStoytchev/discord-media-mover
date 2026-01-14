@@ -2,7 +2,8 @@ use std::time::Duration;
 
 use serenity::{
     all::{
-        ChannelId, Context, CreateMessage, EditMessage, EventHandler, Mentionable, Message, Ready,
+        ChannelId, Context, CreateMessage, EditMessage, EventHandler, Mentionable, Message,
+        ReactionType, Ready,
     },
     async_trait,
 };
@@ -37,6 +38,10 @@ impl EventHandler for Handler {
             Some(_) => CreateMessage::new().content("New gif!"),
             None => CreateMessage::new(),
         };
+
+        msg.react(&ctx.http, ReactionType::Unicode("⏱️".to_string()))
+            .await
+            .unwrap();
 
         let duration = self.gif_keep_duration;
         tokio::spawn(async move {
