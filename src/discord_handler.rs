@@ -26,7 +26,7 @@ impl EventHandler for Handler {
             return;
         }
 
-        let embeds = detect_link_embeds(msg.content.clone()).await;
+        let embeds = detect_link_embeds(&msg.content).await;
 
         if embeds.is_none() && msg.attachments.len() == 0 {
             return;
@@ -34,7 +34,7 @@ impl EventHandler for Handler {
 
         let gifs = generate_attachements(msg.attachments.clone(), msg.id, msg.channel_id).await;
 
-        let gif_message = match embeds.clone() {
+        let gif_message = match &embeds {
             Some(_) => CreateMessage::new().content("New gif!"),
             None => CreateMessage::new(),
         };
@@ -48,13 +48,13 @@ impl EventHandler for Handler {
             sleep(duration).await;
 
             let mut gif_message = dest_channel_id
-                .send_files(ctx.http.clone(), gifs, gif_message)
+                .send_files(&ctx.http, gifs, gif_message)
                 .await
                 .unwrap();
 
             let new_message = CreateMessage::new().content(format!(
                 "{}\nGif(s) rerouted to {}. Original message sent by {}",
-                match embeds.clone() {
+                match &embeds {
                     None => msg.content.clone(),
                     Some(vals) => vals
                         .iter()
@@ -64,11 +64,10 @@ impl EventHandler for Handler {
                         .join(" "),
                 },
                 gif_message.link(),
-                msg.clone().author.mention()
+                &msg.author.mention()
             ));
 
-            let new_message = msg
-                .clone()
+            let new_message = &msg
                 .channel_id
                 .send_message(&ctx, new_message)
                 .await
@@ -80,17 +79,18 @@ impl EventHandler for Handler {
                     match embeds {
                         Some(val) => EditMessage::new().content(format!(
                             "Gif from: {}\n{}",
-                            new_message.clone().link(),
+                            &new_message.link(),
                             val.join("\n")
                         )),
-                        None => EditMessage::new()
-                            .content(format!("Gif from: {}", new_message.clone().link())),
+                        None => {
+                            EditMessage::new().content(format!("Gif from: {}", &new_message.link()))
+                        }
                     },
                 )
                 .await
                 .unwrap();
 
-            msg.clone().delete(&ctx).await.unwrap();
+            msg.delete(&ctx).await.unwrap();
         });
     }
 

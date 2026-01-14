@@ -45,7 +45,7 @@ pub async fn generate_attachements(
     let gifs: Vec<CreateAttachment> = stream::iter(filtered_attachements)
         .map(async |attachment| {
             let data = attachment.download().await.unwrap();
-            CreateAttachment::bytes(data, attachment.filename.clone())
+            CreateAttachment::bytes(data, &attachment.filename)
         })
         .buffer_unordered(5)
         .collect()
@@ -61,7 +61,7 @@ pub async fn generate_attachements(
 }
 
 #[instrument(fields(gif_links = tracing::field::Empty, links = tracing::field::Empty))]
-pub async fn detect_link_embeds(content: String) -> Option<Vec<String>> {
+pub async fn detect_link_embeds(content: &String) -> Option<Vec<String>> {
     let mut finder = LinkFinder::new();
     finder.kinds(&[LinkKind::Url]);
 
@@ -74,14 +74,15 @@ pub async fn detect_link_embeds(content: String) -> Option<Vec<String>> {
 
     let gif_embeds: Vec<String> = stream::iter(found_urls.into_iter())
         .filter(|link| {
-            let url = link.clone();
+            let mut url = link.clone();
+            url.make_ascii_lowercase();
 
             async move {
-                if url.clone().to_lowercase().contains("tenor.com") {
+                if url.contains("tenor.com") {
                     return true;
                 }
 
-                if url.clone().split(".").last().unwrap() == "gif" {
+                if url.ends_with(".gif") {
                     return true;
                 }
 
