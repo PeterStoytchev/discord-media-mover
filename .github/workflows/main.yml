@@ -1,4 +1,4 @@
-name: Release build
+name: Release build (with release)
 
 on:
   workflow_dispatch:
@@ -6,6 +6,10 @@ on:
 env:
   BINARY_NAME: discord-media-mover
   CARGO_TERM_COLOR: always
+
+# Required to allow the action to create a Release
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -15,12 +19,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Linux Job Configuration
           - platform: linux
             target: x86_64-unknown-linux-gnu
             bin_suffix: ""
-
-          # Windows Job Configuration (Cross-compiled)
           - platform: windows
             target: x86_64-pc-windows-gnu
             bin_suffix: ".exe"
@@ -29,12 +30,20 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Get the Short SHA and Cargo Version for naming
+      - name: Get Meta Data
+        id: meta
+        shell: bash
+        run: |
+          echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          version=$(grep '^version =' Cargo.toml | head -n1 | cut -d '"' -f 2)
+          echo "version=$version" >> $GITHUB_OUTPUT
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
-      # Only install the Windows linker if we are currently inside the Windows matrix job
       - name: Install MinGW (Windows Linker)
         if: matrix.platform == 'windows'
         run: |
@@ -44,9 +53,49 @@ jobs:
       - name: Build Release
         run: cargo build --release --target ${{ matrix.target }}
 
-      # Uploads the specific file to GitHub Artifacts
+      # Rename the binary to include Short SHA and Platform
+      # Example: discord-media-mover-a1b2c3d-linux
+      - name: Rename Binary
+        run: |
+          cp target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}${{ matrix.bin_suffix }} \
+             ${{ env.BINARY_NAME }}-${{ steps.meta.outputs.sha_short }}-${{ matrix.platform }}${{ matrix.bin_suffix }}
+
+      # Upload the RENAMED file
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.BINARY_NAME }}-${{ matrix.platform }}
-          path: target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}${{ matrix.bin_suffix }}
+          name: binary-${{ matrix.platform }}
+          path: ${{ env.BINARY_NAME }}-${{ steps.meta.outputs.sha_short }}-${{ matrix.platform }}${{ matrix.bin_suffix }}
+          if-no-files-found: error
+
+  # New Job: Creates the release after builds are done
+  create_release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get Meta Data
+        id: meta
+        run: |
+          echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          version=$(grep '^version =' Cargo.toml | head -n1 | cut -d '"' -f 2)
+          echo "version=$version" >> $GITHUB_OUTPUT
+
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          # Creates a tag like: v0.1.0-a1b2c3d
+          tag_name: v${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.sha_short }}
+          name: Release v${{ steps.meta.outputs.version }} (${{ steps.meta.outputs.sha_short }})
+          draft: false
+          prerelease: false
+          files: artifacts/*
