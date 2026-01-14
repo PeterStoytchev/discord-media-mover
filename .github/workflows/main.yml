@@ -50,7 +50,7 @@ jobs:
       - name: Install MinGW (Windows Linker)
         if: matrix.platform == 'windows'
         run: |
-          cargo install cargo-xwin
+          cargo install --git https://github.com/rust-cross/cargo-xwin.git cargo-xwin
 
       - name: Install musl-tools
         if: matrix.platform == 'linux'
