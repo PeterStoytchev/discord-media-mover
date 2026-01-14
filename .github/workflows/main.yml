@@ -23,7 +23,7 @@ jobs:
       matrix:
         include:
           - platform: linux
-            target: x86_64-unknown-linux-gnu
+            target: x86_64-unknown-linux-musl
             bin_suffix: ""
           - platform: windows
             target: x86_64-pc-windows-gnu
@@ -52,6 +52,12 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y mingw-w64
+
+      - name: Install musl-tools
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
 
       - name: Build Release
         run: cargo build --release --target ${{ matrix.target }}
