@@ -61,6 +61,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y musl-tools
 
+      - name: Cache Rust and xwin
+        uses: Swatinem/rust-cache@v2
+        with:
+          # Cache xwin if we are on the windows platform
+          cache-directories: ${{ matrix.platform == 'windows' && '~/.local/share/xwin' || '' }}
+          # Ensure Windows and Linux never share/overwrite each other's cache
+          prefix-key: "v1-${{ matrix.platform }}"
+
       - name: Build Release (Linux)
         if: matrix.platform == 'linux'
         run: cargo build --release --target ${{ matrix.target }}
