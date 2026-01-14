@@ -14,10 +14,9 @@ use serenity::{
     prelude::Context,
 };
 
-struct Handler;
-
-//const DEST_CHANNEL_ID: ChannelId = ChannelId::new(829861206777004042);
-const DEST_CHANNEL_ID: ChannelId = ChannelId::new(1459932398346047781);
+struct Handler {
+    dest_channel_id: u64,
+}
 
 async fn is_gif_via_curl(url: &str) -> bool {
     let output = Command::new("curl")
@@ -114,7 +113,9 @@ async fn detect_link_embeds(content: String) -> Option<Vec<String>> {
 #[async_trait]
 impl EventHandler for Handler {
     async fn message(&self, ctx: Context, msg: Message) {
-        if msg.channel_id == DEST_CHANNEL_ID || msg.author.bot {
+        let dest_channel_id = ChannelId::new(self.dest_channel_id);
+
+        if msg.channel_id == dest_channel_id || msg.author.bot {
             return;
         }
 
@@ -134,7 +135,7 @@ impl EventHandler for Handler {
         tokio::spawn(async move {
             sleep(Duration::from_secs(10)).await;
 
-            let mut gif_message = DEST_CHANNEL_ID
+            let mut gif_message = dest_channel_id
                 .send_files(ctx.http.clone(), gifs, gif_message)
                 .await
                 .unwrap();
@@ -190,8 +191,22 @@ async fn main() {
 
     let intents = GatewayIntents::all();
 
+    let handler = Handler {
+        dest_channel_id: match env::var("DEST_CHANNEL_ID") {
+            Ok(val) => match val.parse::<u64>() {
+                Ok(num) => num,
+                Err(_) => {
+                    panic!("Invalid DEST_CHANNEL_ID provided!");
+                }
+            },
+            Err(_) => {
+                panic!("DEST_CHANNEL_ID env variable not provided!");
+            }
+        },
+    };
+
     let mut client = Client::builder(&token, intents)
-        .event_handler(Handler)
+        .event_handler(handler)
         .await
         .expect("Error creating client!");
 
