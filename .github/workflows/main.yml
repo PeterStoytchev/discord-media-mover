@@ -53,7 +53,16 @@ jobs:
           curl -L https://github.com/rust-cross/cargo-xwin/releases/download/v0.20.1/cargo-xwin-v0.20.1.x86_64-unknown-linux-musl.tar.gz | tar xz
           sudo mv cargo-xwin /usr/local/bin/
           sudo apt-get update
-          sudo apt-get install -y clang lld
+          sudo apt-get install -y clang lld cmake ninja-build
+          LLVM_PATH=$(command -v llvm-ar)
+          LLVM_DIR=$(dirname "$LLVM_PATH")
+          # Create a symlink to llvm-lib if it exists under a versioned name or is missing
+          if [ -f "$LLVM_DIR/llvm-lib" ]; then
+            sudo ln -sf "$LLVM_DIR/llvm-lib" /usr/local/bin/llvm-lib
+          else
+            # Fallback: llvm-lib is functionally equivalent to llvm-ar in msvc mode
+            sudo ln -sf "$LLVM_PATH" /usr/local/bin/llvm-lib
+          fi
 
       - name: Install musl-tools
         if: matrix.platform == 'linux'
