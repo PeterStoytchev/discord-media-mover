@@ -18,6 +18,8 @@ jobs:
   build:
     name: Build - ${{ matrix.platform }}
     runs-on: ubuntu-latest
+    env:
+      XWIN_DATA_DIR: ${{ github.workspace }}/.xwin-data
     strategy:
       fail-fast: false
       matrix:
@@ -76,7 +78,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           # Cache xwin if we are on the windows platform
-          cache-directories: ${{ matrix.platform == 'windows' && '/home/runner/.local/share/xwin' || '' }}
+          cache-directories: ${{ matrix.platform == 'windows' && env.XWIN_DATA_DIR || '' }}
           # Ensure Windows and Linux never share/overwrite each other's cache
           prefix-key: "v1-${{ matrix.platform }}"
 
