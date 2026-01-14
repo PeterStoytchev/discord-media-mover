@@ -1,0 +1,86 @@
+use std::time::Duration;
+
+use serenity::{
+    all::{ChannelId, Context, CreateMessage, EditMessage, EventHandler, Mentionable, Message},
+    async_trait,
+};
+use tokio::time::sleep;
+
+use crate::utils::{detect_link_embeds, generate_attachements};
+
+pub struct Handler {
+    pub dest_channel_id: u64,
+}
+
+#[async_trait]
+impl EventHandler for Handler {
+    async fn message(&self, ctx: Context, msg: Message) {
+        let dest_channel_id = ChannelId::new(self.dest_channel_id);
+
+        if msg.channel_id == dest_channel_id || msg.author.bot {
+            return;
+        }
+
+        let embeds = detect_link_embeds(msg.content.clone()).await;
+
+        if embeds.is_none() && msg.attachments.len() == 0 {
+            return;
+        }
+
+        let gifs = generate_attachements(msg.attachments.clone(), msg.id, msg.channel_id).await;
+
+        let gif_message = match embeds.clone() {
+            Some(_) => CreateMessage::new().content("New gif!"),
+            None => CreateMessage::new(),
+        };
+
+        tokio::spawn(async move {
+            sleep(Duration::from_secs(10)).await;
+
+            let mut gif_message = dest_channel_id
+                .send_files(ctx.http.clone(), gifs, gif_message)
+                .await
+                .unwrap();
+
+            let new_message = CreateMessage::new().content(format!(
+                "{}\nGif(s) rerouted to {}. Original message sent by {}",
+                match embeds.clone() {
+                    None => msg.content.clone(),
+                    Some(vals) => vals
+                        .iter()
+                        .fold(msg.content.clone(), |acc, word| acc.replace(word, ""))
+                        .split_whitespace()
+                        .collect::<Vec<&str>>()
+                        .join(" "),
+                },
+                gif_message.link(),
+                msg.clone().author.mention()
+            ));
+
+            let new_message = msg
+                .clone()
+                .channel_id
+                .send_message(&ctx, new_message)
+                .await
+                .unwrap();
+
+            gif_message
+                .edit(
+                    &ctx,
+                    match embeds {
+                        Some(val) => EditMessage::new().content(format!(
+                            "Gif from: {}\n{}",
+                            new_message.clone().link(),
+                            val.join("\n")
+                        )),
+                        None => EditMessage::new()
+                            .content(format!("Gif from: {}", new_message.clone().link())),
+                    },
+                )
+                .await
+                .unwrap();
+
+            msg.clone().delete(&ctx).await.unwrap();
+        });
+    }
+}
