@@ -2,7 +2,9 @@ use futures::stream::{self, StreamExt};
 use linkify::{LinkFinder, LinkKind};
 use serenity::all::{Attachment, ChannelId, CreateAttachment, MessageId};
 use tokio::process::Command;
+use tracing::{Span, instrument};
 
+#[instrument(fields(curl_content_type = tracing::field::Empty))]
 pub async fn is_gif_via_curl(url: &str) -> bool {
     let output = Command::new("curl")
         .arg("-I")
@@ -23,13 +25,14 @@ pub async fn is_gif_via_curl(url: &str) -> bool {
                 .next()
                 .unwrap();
 
-            println!("{}", ct);
+            Span::current().record("curl_content_type", ct);
             ct.contains("image/gif")
         }
         Err(_) => false,
     }
 }
 
+#[instrument(fields(gif_attachements = tracing::field::Empty))]
 pub async fn generate_attachements(
     attachments: Vec<Attachment>,
     msg_id: MessageId,
@@ -41,11 +44,6 @@ pub async fn generate_attachements(
 
     let gifs: Vec<CreateAttachment> = stream::iter(filtered_attachements)
         .map(async |attachment| {
-            println!(
-                "Message: {}, Channel: {}, Attachement ID: {}",
-                msg_id, channel_id, attachment.id
-            );
-
             let data = attachment.download().await.unwrap();
             CreateAttachment::bytes(data, attachment.filename.clone())
         })
@@ -53,9 +51,16 @@ pub async fn generate_attachements(
         .collect()
         .await;
 
+    let names: Vec<&str> = gifs
+        .iter()
+        .map(|attachement| attachement.filename.as_str())
+        .collect();
+
+    Span::current().record("gif_attachements", tracing::field::debug(&names));
     return gifs;
 }
 
+#[instrument(fields(gif_links = tracing::field::Empty, links = tracing::field::Empty))]
 pub async fn detect_link_embeds(content: String) -> Option<Vec<String>> {
     let mut finder = LinkFinder::new();
     finder.kinds(&[LinkKind::Url]);
@@ -65,18 +70,18 @@ pub async fn detect_link_embeds(content: String) -> Option<Vec<String>> {
         .map(|l| l.as_str().to_string())
         .collect();
 
+    Span::current().record("links", tracing::field::debug(&found_urls));
+
     let gif_embeds: Vec<String> = stream::iter(found_urls.into_iter())
         .filter(|link| {
             let url = link.clone();
 
             async move {
                 if url.clone().to_lowercase().contains("tenor.com") {
-                    println!("Added! Tenor link detected.");
                     return true;
                 }
 
                 if url.clone().split(".").last().unwrap() == "gif" {
-                    println!(".gif detected");
                     return true;
                 }
 
@@ -87,6 +92,8 @@ pub async fn detect_link_embeds(content: String) -> Option<Vec<String>> {
         })
         .collect()
         .await;
+
+    Span::current().record("gif_links", tracing::field::debug(&gif_embeds));
 
     if gif_embeds.len() == 0 {
         return None;

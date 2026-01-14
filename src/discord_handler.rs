@@ -1,15 +1,19 @@
 use std::time::Duration;
 
 use serenity::{
-    all::{ChannelId, Context, CreateMessage, EditMessage, EventHandler, Mentionable, Message},
+    all::{
+        ChannelId, Context, CreateMessage, EditMessage, EventHandler, Mentionable, Message, Ready,
+    },
     async_trait,
 };
 use tokio::time::sleep;
+use tracing::info;
 
 use crate::utils::{detect_link_embeds, generate_attachements};
 
 pub struct Handler {
     pub dest_channel_id: u64,
+    pub gif_keep_duration: Duration,
 }
 
 #[async_trait]
@@ -34,8 +38,9 @@ impl EventHandler for Handler {
             None => CreateMessage::new(),
         };
 
+        let duration = self.gif_keep_duration;
         tokio::spawn(async move {
-            sleep(Duration::from_secs(10)).await;
+            sleep(duration).await;
 
             let mut gif_message = dest_channel_id
                 .send_files(ctx.http.clone(), gifs, gif_message)
@@ -82,5 +87,9 @@ impl EventHandler for Handler {
 
             msg.clone().delete(&ctx).await.unwrap();
         });
+    }
+
+    async fn ready(&self, _: Context, ready: Ready) {
+        info!("Bot {} ready!", ready.user.display_name())
     }
 }
