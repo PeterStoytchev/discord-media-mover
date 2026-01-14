@@ -1,6 +1,9 @@
-name: Release build (with release)
+name: Release build
 
 on:
+  push:
+    branches:
+      - master
   workflow_dispatch:
 
 env:
