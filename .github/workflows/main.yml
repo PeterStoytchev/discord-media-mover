@@ -18,15 +18,17 @@ jobs:
   build:
     name: Build - ${{ matrix.platform }}
     runs-on: ubuntu-latest
+    env:
+      XWIN_DATA_DIR: ${{ github.workspace }}/.xwin-data
     strategy:
       fail-fast: false
       matrix:
         include:
           - platform: linux
-            target: x86_64-unknown-linux-gnu
+            target: x86_64-unknown-linux-musl
             bin_suffix: ""
           - platform: windows
-            target: x86_64-pc-windows-gnu
+            target: x86_64-pc-windows-msvc
             bin_suffix: ".exe"
 
     steps:
@@ -50,11 +52,47 @@ jobs:
       - name: Install MinGW (Windows Linker)
         if: matrix.platform == 'windows'
         run: |
+          curl -L https://github.com/rust-cross/cargo-xwin/releases/download/v0.20.1/cargo-xwin-v0.20.1.x86_64-unknown-linux-musl.tar.gz | tar xz
+          sudo mv cargo-xwin /usr/local/bin/
           sudo apt-get update
-          sudo apt-get install -y mingw-w64
+          sudo apt-get install -y clang lld cmake ninja-build llvm
+          LLVM_AR_PATH=$(which llvm-ar || which llvm-ar-18 || which llvm-ar-14)
+          if [ -z "$LLVM_AR_PATH" ]; then
+            echo "Error: llvm-ar not found"
+            exit 1
+          fi
+          sudo ln -sf "$LLVM_AR_PATH" /usr/local/bin/llvm-lib
 
-      - name: Build Release
+          # Verify the tools exist
+          llvm-lib --version
+          cmake --version
+          ninja --version
+
+      - name: Install musl-tools
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+
+      - name: Cache Rust and xwin
+        uses: Swatinem/rust-cache@v2
+        with:
+          # Cache xwin if we are on the windows platform
+          cache-directories: ${{ matrix.platform == 'windows' && env.XWIN_DATA_DIR || '' }}
+          # Ensure Windows and Linux never share/overwrite each other's cache
+          prefix-key: "v1-${{ matrix.platform }}"
+
+      - name: Build Release (Linux)
+        if: matrix.platform == 'linux'
         run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Build Release (Windows)
+        if: matrix.platform == 'windows'
+        run: cargo xwin build --release --target ${{ matrix.target }}
+        env:
+          AR: llvm-lib
+          CC: clang
+          CXX: clang++
 
       # Rename the binary to include Short SHA and Platform
       # Example: discord-media-mover-a1b2c3d-linux

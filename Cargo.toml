@@ -1,6 +1,6 @@
 [package]
 name = "discord-media-mover"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 
 [dependencies]
@@ -13,3 +13,8 @@ tokio = { version = "1.49.0", features = ["macros", "rt-multi-thread", "process"
 tokio-rustls = "0.26.4"
 tracing = "0.1.44"
 tracing-subscriber =  { version = "0.3.22", features = ["env-filter"]}
+
+[profile.release]
+strip = true
+opt-level = 3
+lto = "thin"
