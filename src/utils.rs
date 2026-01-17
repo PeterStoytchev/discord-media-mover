@@ -61,7 +61,7 @@ pub async fn generate_attachements(
 }
 
 #[instrument(fields(gif_links = tracing::field::Empty, links = tracing::field::Empty))]
-pub async fn detect_link_embeds(content: &String) -> Option<Vec<String>> {
+pub async fn detect_link_embeds(content: &String, domains: &Vec<String>) -> Option<Vec<String>> {
     let mut finder = LinkFinder::new();
     finder.kinds(&[LinkKind::Url]);
 
@@ -77,9 +77,13 @@ pub async fn detect_link_embeds(content: &String) -> Option<Vec<String>> {
             let mut url = link.clone();
             url.make_ascii_lowercase();
 
+            let domains = domains.clone();
+
             async move {
-                if url.contains("tenor.com") {
-                    return true;
+                for domain in domains {
+                    if url.contains(domain.as_str()) {
+                        return true;
+                    }
                 }
 
                 if url.ends_with(".gif") {

@@ -1,6 +1,6 @@
 use discord_media_mover::discord_handler::Handler;
-use std::env;
 use std::time::Duration;
+use std::{env, str::FromStr};
 
 use dotenvy::dotenv;
 use serenity::{Client, all::GatewayIntents};
@@ -48,6 +48,16 @@ async fn main() {
                 Err(_) => Duration::from_secs(10),
             },
             Err(_) => Duration::from_secs(10),
+        },
+        banned_domains: match env::var("BANNED_DOMAINS") {
+            Ok(val) => val
+                .split(";")
+                .map(|domain| String::from_str(domain).unwrap())
+                .collect(),
+            Err(_) => vec![
+                String::from_str("klipy.com").unwrap(),
+                String::from_str("tenor.com").unwrap(),
+            ],
         },
     };
 

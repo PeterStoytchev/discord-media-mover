@@ -15,6 +15,7 @@ use crate::utils::{detect_link_embeds, generate_attachements};
 pub struct Handler {
     pub dest_channel_id: u64,
     pub gif_keep_duration: Duration,
+    pub banned_domains: Vec<String>,
 }
 
 #[async_trait]
@@ -26,7 +27,7 @@ impl EventHandler for Handler {
             return;
         }
 
-        let embeds = detect_link_embeds(&msg.content).await;
+        let embeds = detect_link_embeds(&msg.content, &self.banned_domains).await;
 
         if embeds.is_none() && msg.attachments.len() == 0 {
             return;
