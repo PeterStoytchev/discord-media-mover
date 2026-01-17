@@ -5,7 +5,7 @@ use tokio::process::Command;
 use tracing::{Span, instrument};
 
 #[instrument(fields(curl_content_type = tracing::field::Empty))]
-pub async fn is_gif_via_curl(url: &str) -> bool {
+pub async fn is_gif_via_curl(url: &str, banned_formats: &Vec<String>) -> bool {
     let output = Command::new("curl")
         .arg("-I")
         .arg("-L")
@@ -26,7 +26,12 @@ pub async fn is_gif_via_curl(url: &str) -> bool {
                 .unwrap();
 
             Span::current().record("curl_content_type", ct);
-            ct.contains("image/gif")
+            for format in banned_formats {
+                if ct.contains(format.as_str()) {
+                    return true;
+                }
+            }
+            false
         }
         Err(_) => false,
     }
@@ -37,10 +42,12 @@ pub async fn generate_attachements(
     attachments: Vec<Attachment>,
     msg_id: MessageId,
     channel_id: ChannelId,
+    banned_formats: &Vec<String>,
 ) -> Vec<CreateAttachment> {
     let filtered_attachements = attachments
+        .clone()
         .into_iter()
-        .filter(|attachment| attachment.content_type.as_ref().unwrap() == "image/gif");
+        .filter(|attachment| banned_formats.contains(attachment.content_type.as_ref().unwrap()));
 
     let gifs: Vec<CreateAttachment> = stream::iter(filtered_attachements)
         .map(async |attachment| {
@@ -57,11 +64,16 @@ pub async fn generate_attachements(
         .collect();
 
     Span::current().record("gif_attachements", tracing::field::debug(&names));
+
     return gifs;
 }
 
 #[instrument(fields(gif_links = tracing::field::Empty, links = tracing::field::Empty))]
-pub async fn detect_link_embeds(content: &String) -> Option<Vec<String>> {
+pub async fn detect_link_embeds(
+    content: &String,
+    domains: &Vec<String>,
+    formats: &Vec<String>,
+) -> Option<Vec<String>> {
     let mut finder = LinkFinder::new();
     finder.kinds(&[LinkKind::Url]);
 
@@ -77,16 +89,20 @@ pub async fn detect_link_embeds(content: &String) -> Option<Vec<String>> {
             let mut url = link.clone();
             url.make_ascii_lowercase();
 
+            let domains = domains.clone();
+
             async move {
-                if url.contains("tenor.com") {
-                    return true;
+                for domain in domains {
+                    if url.contains(domain.as_str()) {
+                        return true;
+                    }
                 }
 
                 if url.ends_with(".gif") {
                     return true;
                 }
 
-                let is_gif = is_gif_via_curl(&url).await;
+                let is_gif = is_gif_via_curl(&url, formats).await;
 
                 is_gif
             }
