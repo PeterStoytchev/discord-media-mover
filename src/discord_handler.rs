@@ -16,6 +16,7 @@ pub struct Handler {
     pub dest_channel_id: u64,
     pub gif_keep_duration: Duration,
     pub banned_domains: Vec<String>,
+    pub banned_formats: Vec<String>,
 }
 
 #[async_trait]
@@ -27,13 +28,28 @@ impl EventHandler for Handler {
             return;
         }
 
-        let embeds = detect_link_embeds(&msg.content, &self.banned_domains).await;
+        let embeds =
+            detect_link_embeds(&msg.content, &self.banned_domains, &self.banned_formats).await;
 
-        if embeds.is_none() && msg.attachments.len() == 0 {
+        if embeds.is_none() {
+            info!("embeds is none!");
+        }
+
+        if msg.attachments.len() == 0 {
+            info!("attachements is none!");
+        }
+
+        if msg.attachments.len() == 0 && embeds.is_none() {
             return;
         }
 
-        let gifs = generate_attachements(msg.attachments.clone(), msg.id, msg.channel_id).await;
+        let gifs = generate_attachements(
+            msg.attachments.clone(),
+            msg.id,
+            msg.channel_id,
+            &self.banned_formats,
+        )
+        .await;
 
         let gif_message = match &embeds {
             Some(_) => CreateMessage::new().content("New gif!"),
