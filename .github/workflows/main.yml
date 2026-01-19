@@ -19,7 +19,7 @@ jobs:
     name: Build - ${{ matrix.platform }}
     runs-on: ubuntu-latest
     env:
-      XWIN_DATA_DIR: ${{ github.workspace }}/.xwin-data
+      XWIN_CACHE_DIR: ${{ github.workspace }}/.xwin-data
     strategy:
       fail-fast: false
       matrix:
@@ -74,12 +74,16 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y musl-tools
 
-      - name: Cache Rust and xwin
+      - name: Cache xwin SDK
+        if: matrix.platform == 'windows'
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.XWIN_CACHE_DIR }}
+          key: xwin-sdk-v1
+
+      - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
         with:
-          # Cache xwin if we are on the windows platform
-          cache-directories: ${{ matrix.platform == 'windows' && env.XWIN_DATA_DIR || '' }}
-          # Ensure Windows and Linux never share/overwrite each other's cache
           prefix-key: "v1-${{ matrix.platform }}"
 
       - name: Build Release (Linux)

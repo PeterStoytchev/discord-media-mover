@@ -31,18 +31,6 @@ impl EventHandler for Handler {
         let embeds =
             detect_link_embeds(&msg.content, &self.banned_domains, &self.banned_formats).await;
 
-        if embeds.is_none() {
-            info!("embeds is none!");
-        }
-
-        if msg.attachments.len() == 0 {
-            info!("attachements is none!");
-        }
-
-        if msg.attachments.len() == 0 && embeds.is_none() {
-            return;
-        }
-
         let gifs = generate_attachements(
             msg.attachments.clone(),
             msg.id,
@@ -50,6 +38,10 @@ impl EventHandler for Handler {
             &self.banned_formats,
         )
         .await;
+
+        if gifs.is_empty() && embeds.is_none() {
+            return;
+        }
 
         let gif_message = match &embeds {
             Some(_) => CreateMessage::new().content("New gif!"),
