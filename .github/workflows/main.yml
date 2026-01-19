@@ -19,7 +19,7 @@ jobs:
     name: Build - ${{ matrix.platform }}
     runs-on: ubuntu-latest
     env:
-      XWIN_DATA_DIR: ${{ github.workspace }}/.xwin-data
+      XWIN_CACHE_DIR: ${{ github.workspace }}/.xwin-data
     strategy:
       fail-fast: false
       matrix:
@@ -78,7 +78,7 @@ jobs:
         if: matrix.platform == 'windows'
         uses: actions/cache@v4
         with:
-          path: .xwin-data
+          path: ${{ env.XWIN_CACHE_DIR }}
           key: xwin-sdk-v1
 
       - name: Cache Cargo
